@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Inas Fly - Game</title>
+  <style>
+    :root {
+      --bg: #2d0dbd;
+      --ink: #3a1f10;
+      --ground: #8a4b22;
+      --sky1: #95d8c7;
+      --sky2: #f8e2b0;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      user-select: none;
+      touch-action: manipulation;
+      font-family: Georgia, "Times New Roman", serif;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    #wrap {
+      position: relative;
+      width: min(100vw, 420px);
+      height: min(100vh, 640px);
+      aspect-ratio: 9 / 14;
+      max-height: 640px;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 3px solid var(--ink);
+      border-radius: 6px;
+      background: linear-gradient(var(--sky1), var(--sky2));
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="c" width="360" height="560" aria-label="Game Inas Fly"></canvas>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width;
+    const H = canvas.height;
+    const GROUND_H = 70;
+
+    let state = "ready";
+    let timer = 0;
+    let frame = 0;
+    let score = 0;
+    let best = 0;
+
+    let bird = null;
+    let pipes = [];
+
+    const spriteSvg = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000">
+        <defs>
+          <linearGradient id="skinG" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#f5c7a2"/>
+            <stop offset="100%" stop-color="#e8b896"/>
+          </linearGradient>
+          <linearGradient id="hijabG" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#6b7682"/>
+            <stop offset="100%" stop-color="#4a5568"/>
+          </linearGradient>
+          <linearGradient id="shirtG" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#1b8fd4"/>
+            <stop offset="100%" stop-color="#0c73d0"/>
+          </linearGradient>
+        </defs>
+
+        <g stroke="#1d1d1d" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill-rule="evenodd">
+          <path d="M 250 500 L 520 540 L 560 920 L 220 900 Z" fill="url(#shirtG)"/>
+          <path d="M 250 500 L 180 540 L 160 680 L 240 640 Z" fill="#0a5eb5"/>
+          <path d="M 520 540 L 640 500 L 710 600 L 600 640 Z" fill="#0a5eb5"/>
+          <ellipse cx="385" cy="475" rx="38" ry="50" fill="url(#skinG)"/>
+          <path d="M 235 280 C 218 200, 285 130, 385 120 C 485 110, 550 165, 570 260 L 548 490 C 542 510, 510 530, 420 535 C 330 540, 270 510, 248 490 Z" fill="url(#skinG)"/>
+          <path d="M 200 260 C 185 170, 252 100, 385 85 C 525 68, 590 145, 610 280 L 600 500 C 595 535, 560 560, 420 570 C 280 580, 210 540, 195 500 Z" fill="url(#hijabG)"/>
+          <path d="M 570 260 C 588 310, 605 400, 580 500 L 520 510 C 545 410, 555 285, 542 245 Z" fill="#5b636c"/>
+          <path d="M 280 160 Q 360 145 440 170" fill="none" stroke="#4a5568" stroke-width="6" opacity="0.6"/>
+          <path d="M 250 240 Q 350 225 480 250" fill="none" stroke="#4a5568" stroke-width="5" opacity="0.5"/>
+          <path d="M 250 500 L 130 590 L 110 750 L 190 755 L 230 640 Z" fill="url(#skinG)"/>
+          <ellipse cx="120" cy="680" rx="28" ry="50" fill="#f5c7a2" opacity="0.9"/>
+          <path d="M 520 540 L 600 380 L 680 340 L 720 420 L 650 520 L 580 480 Z" fill="url(#skinG)"/>
+          <path d="M 680 340 L 750 310 L 780 380 L 720 420 Z" fill="url(#skinG)"/>
+          <g fill="url(#skinG)">
+            <path d="M 710 320 L 735 305 L 745 360 L 715 365 Z"/>
+            <path d="M 730 310 L 770 290 L 778 375 L 745 368 Z"/>
+            <path d="M 750 308 L 790 295 L 795 385 L 765 375 Z"/>
+            <path d="M 765 315 L 800 310 L 800 395 L 775 382 Z"/>
+          </g>
+          <ellipse cx="760" cy="345" rx="45" ry="55" fill="#1d1d1d" opacity="0.08"/>
+          <path d="M 295 310 Q 315 295 330 310 Q 318 325 300 325 Q 288 318 295 310 Z" fill="#3b2c22"/>
+          <circle cx="315" cy="312" r="6" fill="#1d1d1d"/>
+          <circle cx="316" cy="309" r="2.5" fill="#fff"/>
+          <circle cx="313" cy="308" r="1" fill="#fff" opacity="0.8"/>
+          <path d="M 425 320 Q 445 305 460 320 Q 448 335 430 335 Q 418 328 425 320 Z" fill="#3b2c22"/>
+          <circle cx="442" cy="320" r="6" fill="#1d1d1d"/>
+          <circle cx="443" cy="317" r="2.5" fill="#fff"/>
+          <circle cx="440" cy="316" r="1" fill="#fff" opacity="0.8"/>
+          <path d="M 285 285 Q 315 273 333 285" fill="none" stroke="#6a4a3a" stroke-width="6" stroke-linecap="round"/>
+          <path d="M 415 293 Q 442 283 460 293" fill="none" stroke="#6a4a3a" stroke-width="6" stroke-linecap="round"/>
+          <path d="M 370 320 L 380 375 Q 380 383 373 385" fill="none" stroke="#d9a07d" stroke-width="6" stroke-linecap="round"/>
+          <ellipse cx="270" cy="370" rx="32" ry="18" fill="#f6a7a4" opacity="0.42"/>
+          <ellipse cx="455" cy="380" rx="32" ry="18" fill="#f6a7a4" opacity="0.42"/>
+          <path d="M 350 410 Q 385 428 415 420" fill="none" stroke="#d96d6b" stroke-width="7" stroke-linecap="round"/>
+          <path d="M 350 430 Q 385 448 415 438" fill="none" stroke="#d96d6b" stroke-width="7" stroke-linecap="round"/>
+          <ellipse cx="382" cy="428" rx="50" ry="20" fill="#d96d6b" opacity="0.65"/>
+          <ellipse cx="382" cy="432" rx="40" ry="8" fill="#b7585a" opacity="0.5"/>
+          <path d="M 235 160 Q 305 125 385 120 Q 465 115 570 155" fill="none" stroke="#4a5568" stroke-width="9" opacity="0.85"/>
+          <g stroke="#1d1d1d" stroke-width="5" fill="none">
+            <circle cx="350" cy="630" r="9"/>
+            <circle cx="385" cy="700" r="9"/>
+            <circle cx="375" cy="770" r="9"/>
+          </g>
+          <rect x="640" y="495" width="65" height="30" fill="#0a5eb5" stroke="#1d1d1d" stroke-width="7" rx="5"/>
+          <path d="M 645 505 L 700 505 M 645 518 L 700 518" stroke="#1d1d1d" stroke-width="3"/>
+          <rect x="140" y="640" width="60" height="26" fill="#0a5eb5" stroke="#1d1d1d" stroke-width="7" rx="5"/>
+          <path d="M 145 650 L 195 650 M 145 660 L 195 660" stroke="#1d1d1d" stroke-width="3"/>
+        </g>
+        <ellipse cx="390" cy="970" rx="200" ry="40" fill="#1d1d1d" opacity="0.15"/>
+      </svg>
+    `;
+
+    const spriteImage = new Image();
+    spriteImage.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(spriteSvg);
+
+    function resetGame() {
+      bird = {
+        x: 85,
+        y: H / 2 - 50,
+        vy: 0,
+        w: 140,
+        h: 200,
+        tilt: 0
+      };
+      pipes = [];
+      score = 0;
+      frame = 0;
+      timer = 0;
+    }
+    resetGame();
+
+    function flap() {
+      if (state === "ready") {
+        state = "play";
+      }
+
+      if (state === "dead") {
+        if (timer > 25) {
+          resetGame();
+          state = "ready";
+        }
+        return;
+      }
+
+      bird.vy = -7.0;
+    }
+
+    document.addEventListener("keydown", e => {
+      if (e.code === "Space" || e.code === "ArrowUp") {
+        e.preventDefault();
+        flap();
+      }
+    });
+
+    canvas.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      flap();
+    });
+
+    function setDead() {
+      state = "dead";
+      timer = 0;
+      if (score > best) {
+        best = score;
+        try { localStorage.setItem("inas_fly_best", String(best)); } catch (e) {}
+      }
+    }
+
+    function update() {
+      timer++;
+      frame++;
+
+      if (state === "ready") {
+        bird.y = H / 2 - 50 + Math.sin(timer / 12) * 8;
+        bird.tilt = 0.12;
+        return;
+      }
+
+      if (state === "dead") {
+        if (bird.y + bird.h < H - GROUND_H) {
+          bird.vy += 0.56;
+          bird.y += bird.vy;
+          bird.tilt = Math.min(1.3, bird.tilt + 0.025);
+        }
+        return;
+      }
+
+      bird.vy += 0.42;
+      bird.y += bird.vy;
+
+      if (frame % 95 === 1) {
+        const gap = 150;
+        const minTop = 65;
+        const maxTop = H - GROUND_H - gap - 115;
+        const topHeight = minTop + Math.random() * (maxTop - minTop);
+
+        pipes.push({
+          x: W + 20,
+          w: 54,
+          gapY: topHeight,
+          gapH: gap,
+          passed: false
+        });
+      }
+
+      for (const p of pipes) {
+        p.x -= 2.6;
+
+        if (!p.passed && p.x + p.w < bird.x) {
+          p.passed = true;
+          score++;
+        }
+
+        const bx = bird.x + 22;
+        const by = bird.y + 25;
+        const bw = bird.w - 45;
+        const bh = bird.h - 40;
+
+        const hitX = bx + bw > p.x && bx < p.x + p.w;
+        const hitY = by < p.gapY || by + bh > p.gapY + p.gapH;
+
+        if (hitX && hitY) {
+          setDead();
+        }
+      }
+
+      pipes = pipes.filter(p => p.x > -80);
+
+      if (bird.y + bird.h > H - GROUND_H || bird.y < -25) {
+        setDead();
+      }
+
+      bird.tilt = Math.max(-0.75, Math.min(1.15, bird.vy / 12));
+    }
+
+    function drawBackground() {
+      const sky = ctx.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, "#95d8c7");
+      sky.addColorStop(1, "#f8e2b0");
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.fillStyle = "#5d9c78";
+      ctx.beginPath();
+      ctx.moveTo(0, H - GROUND_H);
+      ctx.lineTo(70, H - GROUND_H - 120);
+      ctx.lineTo(150, H - GROUND_H);
+      ctx.lineTo(235, H - GROUND_H - 155);
+      ctx.lineTo(320, H - GROUND_H);
+      ctx.lineTo(360, H - GROUND_H - 80);
+      ctx.lineTo(360, H - GROUND_H);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      for (let i = 0; i < 4; i++) {
+        const x = ((i * 115 + (frame * 0.18)) % (W + 90)) - 35;
+        const y = 36 + (i % 3) * 30;
+        ctx.beginPath();
+        ctx.arc(x, y, 19, 0, Math.PI * 2);
+        ctx.arc(x + 20, y - 9, 17, 0, Math.PI * 2);
+        ctx.arc(x + 40, y, 23, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawPipe(x, y, h, topPipe = true) {
+      const g = ctx.createLinearGradient(x, 0, x + 54, 0);
+      g.addColorStop(0, "#5c8a32");
+      g.addColorStop(0.5, "#9ccc4a");
+      g.addColorStop(1, "#3b6420");
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, 54, h);
+
+      ctx.fillStyle = "#2f4f18";
+      for (let i = 0; i < h; i += 48) {
+        const yy = topPipe ? y + h - i - 8 : y + i;
+        ctx.fillRect(x - 3, yy, 60, 8);
+      }
+
+      ctx.strokeStyle = "#2a3f14";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, 54, h);
+    }
+
+    function drawPipes() {
+      for (const p of pipes) {
+        drawPipe(p.x, 0, p.gapY, true);
+        drawPipe(p.x, p.gapY + p.gapH, H - GROUND_H - (p.gapY + p.gapH), false);
+      }
+    }
+
+    function drawGround() {
+      ctx.fillStyle = "#8a4b22";
+      ctx.fillRect(0, H - GROUND_H, W, GROUND_H);
+
+      ctx.fillStyle = "#c8321f";
+      const offset = state === "play" ? (frame * 2.7) % 40 : 0;
+      for (let i = -1; i < 12; i++) {
+        const x = i * 40 - offset;
+        ctx.beginPath();
+        ctx.moveTo(x, H - GROUND_H);
+        ctx.lineTo(x + 20, H - GROUND_H + 20);
+        ctx.lineTo(x + 40, H - GROUND_H);
+        ctx.lineTo(x + 20, H - GROUND_H + 8);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    function drawBird() {
+      const offsetX = bird.x + bird.w / 2;
+      const offsetY = bird.y + bird.h / 2;
+
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.rotate(bird.tilt);
+
+      if (spriteImage.complete) {
+        ctx.drawImage(spriteImage, -bird.w / 2, -bird.h / 2, bird.w, bird.h);
+      } else {
+        ctx.fillStyle = "#f5c7a2";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 45, 55, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    function drawText() {
+      ctx.textAlign = "center";
+      ctx.lineJoin = "round";
+
+      const drawLabel = (text, y, size, fill = "#fff", stroke = "#3a1f10") => {
+        ctx.font = `bold ${size}px Georgia,serif`;
+        ctx.lineWidth = size / 5;
+        ctx.strokeStyle = stroke;
+        ctx.strokeText(text, W / 2, y);
+        ctx.fillStyle = fill;
+        ctx.fillText(text, W / 2, y);
+      };
+
+      if (state === "play") {
+        drawLabel(String(score), 70, 52, "#fff", "#3a1f10");
+      }
+
+      if (state === "ready") {
+        drawLabel("Inas Fly", 150, 40, "#fff", "#3a1f10");
+        drawLabel("Ketuk / Spasi untuk terbang", 206, 14, "#fff", "#3a1f10");
+        drawLabel("Rekor: " + best, 236, 18, "#ffe08a", "#3a1f10");
+      }
+
+      if (state === "dead") {
+        drawLabel("Modar", 168, 42, "#ffb3a6", "#3a1f10");
+        drawLabel("Skor " + score + "  •  Rekor " + best, 216, 20, "#fff", "#3a1f10");
+        if (timer > 25) {
+          drawLabel("Tekan untuk main lagi", 255, 16, "#ffe08a", "#3a1f10");
+        }
+      }
+    }
+
+    function render() {
+      update();
+      drawBackground();
+      drawPipes();
+      drawGround();
+      drawBird();
+      drawText();
+      requestAnimationFrame(render);
+    }
+
+    try {
+      best = Number(localStorage.getItem("inas_fly_best")) || 0;
+    } catch (e) {}
+
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
